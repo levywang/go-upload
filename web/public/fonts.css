@@ -1,0 +1,9 @@
+/* 本地化 Inter 字体（public/fonts.woff2）
+   注意：该配置假设 fonts.woff2 是 Inter 的可变字体（单文件覆盖多个字重）。 */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/fonts.woff2') format('woff2');
+}

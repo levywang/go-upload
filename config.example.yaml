@@ -1,0 +1,33 @@
+# go-upload 生产环境配置模板 (CentOS 8)
+# 注意：请根据实际环境修改以下配置
+
+server:
+  # 监听地址（0.0.0.0 表示监听所有网络接口）
+  addr: "0.0.0.0:5000"
+
+static:
+  # 启用嵌入的静态文件服务
+  enable: true
+
+storage:
+  # 上传根目录（所有文件都被约束在此目录内）
+  # 建议使用大容量磁盘
+  root_dir: "/opt/go-upload/uploads"
+  
+  # 上传会话状态存储目录（相对于 root_dir）
+  state_dir: ".go-upload_state"
+
+limits:
+  # 单次分片最大大小（32MB）
+  max_chunk_bytes: 33554432
+  
+  # 单文件最大大小（0 表示不限制，建议设置合理上限）
+  # 例如：10GB = 10737418240
+  max_file_bytes: 0
+
+# 生产环境建议：
+# 1. 确保 /opt/go-upload/uploads 目录有足够磁盘空间
+# 2. 定期备份上传的文件
+# 3. 配置反向代理（nginx）处理 HTTPS 和负载均衡
+# 4. 设置日志轮转
+# 5. 配置监控和告警

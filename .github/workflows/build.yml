@@ -1,0 +1,119 @@
+name: Build Embedded Binaries
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
+      - "web/**"
+      - ".github/workflows/build.yml"
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
+      - "web/**"
+      - ".github/workflows/build.yml"
+  release:
+    types:
+      - published
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  # Mirrors / proxies
+  NPM_CONFIG_REGISTRY: https://mirrors.cloud.tencent.com/npm/
+  GOPROXY: https://goproxy.cn,direct
+  GOSUMDB: off
+
+  # Builder images (override via repository variables if you use an internal registry)
+  GO_BUILDER_IMAGE: golang:1.22
+  NODE_BUILDER_IMAGE: node:22-bullseye-slim
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build (Docker)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cat > Dockerfile.ci <<'EOF'
+          ARG NODE_BUILDER_IMAGE
+          ARG GO_BUILDER_IMAGE
+          ARG NPM_CONFIG_REGISTRY
+          ARG GOPROXY
+          ARG GOSUMDB
+
+          FROM ${NODE_BUILDER_IMAGE} AS webbuilder
+          WORKDIR /src
+          COPY web/ /src/web/
+          RUN cd web \
+            && npm config set registry "${NPM_CONFIG_REGISTRY}" \
+            && npm ci --no-audit --no-fund
+          RUN cd web && npm run build
+
+          FROM ${GO_BUILDER_IMAGE} AS gobuilder
+          WORKDIR /src
+          COPY . .
+          COPY --from=webbuilder /src/web/dist ./web/dist
+
+          RUN go env -w GOPROXY=${GOPROXY} \
+            && go env -w GOSUMDB=${GOSUMDB}
+
+          RUN mkdir -p /out \
+            && CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /out/go-upload-linux-amd64 . \
+            && CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o /out/go-upload-linux-arm64 . \
+            && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /out/go-upload-windows-amd64.exe . \
+            && CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /out/go-upload-darwin-amd64 . \
+            && CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o /out/go-upload-darwin-arm64 .
+          EOF
+
+          docker buildx build \
+            --cache-from type=gha \
+            --cache-to type=gha,mode=max \
+            --load \
+            --build-arg GO_BUILDER_IMAGE=${GO_BUILDER_IMAGE} \
+            --build-arg NODE_BUILDER_IMAGE=${NODE_BUILDER_IMAGE} \
+            --build-arg NPM_CONFIG_REGISTRY=${NPM_CONFIG_REGISTRY} \
+            --build-arg GOPROXY=${GOPROXY} \
+            --build-arg GOSUMDB=${GOSUMDB} \
+            -t go-upload-build:${GITHUB_SHA} -f Dockerfile.ci .
+
+          CID=$(docker create go-upload-build:${GITHUB_SHA})
+          mkdir -p dist
+          docker cp ${CID}:/out/. dist/
+          docker rm -f ${CID}
+          ls -lah dist
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-upload-binaries-${{ github.ref_name }}-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Publish to GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*
