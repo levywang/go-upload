@@ -9,7 +9,7 @@ const Header: React.FC = () => {
           <div className="bg-slate-900 p-1.5 rounded-lg">
             <Cloud className="w-5 h-5 text-white" />
           </div>
-          <span className="font-semibold text-slate-800 text-lg tracking-tight">XEPIC Upload</span>
+          <span className="font-semibold text-slate-800 text-lg tracking-tight">Go Upload</span>
         </div>
       </div>
     </header>

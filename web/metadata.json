@@ -1,5 +1,5 @@
 {
-  "name": "XEPIC Upload Transfer",
+  "name": "Go Upload Transfer",
   "description": "A professional, minimalist file upload management system featuring server-path selection, real-time progress tracking, and secure transfer simulations.",
   "requestFramePermissions": []
 }
